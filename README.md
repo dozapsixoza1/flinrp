@@ -1,6 +1,6 @@
 # FLIN RP Mobile Launcher
 
-This repository is the working area for the FLIN RP Android launcher based on the supplied Flinity APK.
+Working repository for the FLIN RP Android launcher based on the supplied Flinity package.
 
 ## Server target
 
@@ -8,16 +8,26 @@ This repository is the working area for the FLIN RP Android launcher based on th
 - Port: `3146`
 - Display name: `FLIN RP`
 
-## Current source status
+## Native library inspection
 
-The supplied archive `Flinity_flinityRelease29.12.2025.zip` is an APK package, not an Android Studio source project. It contains three DEX files, Android resources, `assets/libsamp.so`, and ARMv7 native libraries including `libGTASA.so` and `libsamp.so`.
+The repository's `libsamp.so` was inspected by GitHub Actions.
 
-The package already contains FLIN-branded resources and server labels such as `FLIN MOBILE #1` and `FLIN MOBILE #2`. The configured target address was not found in the initial static string scan.
+- File size: 1,136,956 bytes
+- Format: ELF32, ARM (32-bit ARM / EABI5)
+- Build: Android 14, NDK r17c
+- Required shared libraries: `liblog.so`, `libc.so`, `libm.so`, `libdl.so`
+- SHA-256: `893e4afc3fcded597073a54cddc81fdfae3e12ac21faa1f6fbf9fe2e3703fcf8`
+
+The supplied Flinity package contains two different files named `libsamp.so`:
+
+- `assets/libsamp.so` — 1,169,668 bytes, also ELF32 ARM.
+- `lib/armeabi-v7a/libsamp.so` — 4,081,636 bytes; exports the Java native methods `setClientIp` and `setClientPort`.
+
+The FLIN RP library is close in size and ABI to the Flinity **assets** library, but it is not the same binary and its exported-symbol set differs. It does not expose the Java `setClientIp` / `setClientPort` symbols present in Flinity's 4 MB runtime library. Therefore it must **not** be copied over `lib/armeabi-v7a/libsamp.so`. Replacing the assets copy also needs confirmation of the exact asset-loading path before changing the APK.
 
 ## Build status
 
-No APK build is claimed yet. To produce a modified, installable APK safely, the original APK must be decoded, the launcher connection configuration identified and changed, then rebuilt and signed. A GitHub Actions workflow cannot create a valid modified APK from this repository alone until the APK binary is available to the workflow and the correct connection setting has been located.
+The native inspection workflow is active and completed successfully:
+https://github.com/dozapsixoza1/flinrp/actions/runs/41239829158
 
-## Next technical step
-
-Inspect the decompiled launcher code around its server-selection / connection setup and identify how it calls the native client setters `setClientIp` and `setClientPort`. Then apply the FLIN RP host and port and verify the resulting APK on an Android device.
+No modified APK has been built or signed yet. The launcher package still needs its asset-loading path and Java/native connection setup verified before replacing any binary or producing an installable APK.
