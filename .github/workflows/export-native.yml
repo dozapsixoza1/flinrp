@@ -1,0 +1,33 @@
+name: Export FLIN RP native library
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'libsamp.so'
+      - '.github/workflows/export-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and package native library
+        run: |
+          set -euo pipefail
+          test -s libsamp.so
+          file libsamp.so
+          sha256sum libsamp.so
+          readelf -h libsamp.so
+          mkdir -p export
+          cp libsamp.so export/FLIN-RP-libsamp.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLIN-RP-native-library
+          path: export/FLIN-RP-libsamp.so
+          if-no-files-found: error
+          retention-days: 7
