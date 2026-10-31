@@ -21,10 +21,9 @@ elf_class = re.search(r"Class:\s*(.+)", header)
 needed = re.findall(r"Shared library: \[(.*?)\]", dynamic)
 exports = []
 for line in symbols.splitlines():
-    if " GLOBAL " in line and " DEFAULT " in line and not line.rstrip().endswith(" UND"):
-        name = line.split()[-1]
-        if name != "0":
-            exports.append(name)
+    fields = line.split()
+    if len(fields) >= 8 and fields[4] == "GLOBAL" and fields[5] == "DEFAULT" and fields[6] != "UND":
+        exports.append(fields[7])
 
 print("# FLIN RP native library report")
 print()
