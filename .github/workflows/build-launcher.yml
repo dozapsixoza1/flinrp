@@ -1,0 +1,63 @@
+name: FLIN RP Android launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_url:
+        description: 'Direct HTTPS URL to the original Flinity APK or ZIP'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source package
+        env:
+          SOURCE_URL: ${{ inputs.source_url }}
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "$SOURCE_URL" -o /tmp/source.bin
+          mkdir -p work/original
+          if unzip -t /tmp/source.bin >/dev/null 2>&1; then
+            unzip -q /tmp/source.bin -d work/original
+          else
+            cp /tmp/source.bin work/original.apk
+          fi
+      - name: Locate APK or rebuild archive container
+        run: |
+          set -euo pipefail
+          APK="$(find work/original -type f -name '*.apk' -print -quit)"
+          mkdir -p work
+          if [ -z "$APK" ]; then
+            ROOT="$(find work/original -type f -name AndroidManifest.xml -printf '%h\n' -quit)"
+            test -n "$ROOT" || { echo 'No APK or AndroidManifest.xml found'; exit 1; }
+            (cd "$ROOT" && zip -qr "$GITHUB_WORKSPACE/work/flinity-original.apk" .)
+            APK="$GITHUB_WORKSPACE/work/flinity-original.apk"
+          fi
+          cp "$APK" work/input.apk
+      - name: Install tools and decode APK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool
+          apktool d -f work/input.apk -o work/decoded
+      - name: Inspect connection configuration
+        run: |
+          python3 tools/inspect_package.py work/decoded | tee work/inspection.txt
+          if ! grep -Raq '195\.18\.27\.226' work/decoded; then
+            echo 'STOP: FLIN RP host is not stored as a plain string.'
+            echo 'The server list may be delivered remotely or encoded in DEX/native code.'
+            echo 'No APK will be produced until the actual connection setter is identified.'
+            exit 2
+          fi
+          echo 'Host string found. Manual code-level validation is still required before release.'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: FLIN-RP-inspection
+          path: work/inspection.txt
+          if-no-files-found: ignore
