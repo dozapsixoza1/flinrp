@@ -1,18 +1,55 @@
 name: FLIN RP Android launcher
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-launcher.yml'
+      - 'source/**'
+      - 'tools/**'
   workflow_dispatch:
     inputs:
       source_url:
         description: 'Direct HTTPS URL to the original Flinity APK or ZIP'
-        required: true
+        required: false
         type: string
 
 permissions:
   contents: read
 
 jobs:
+  source-readiness:
+    if: github.event_name == 'push' || inputs.source_url == ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether the original launcher package is available
+        run: |
+          if find source -type f \\( -name '*.apk' -o -name '*.zip' \\) -print -quit 2>/dev/null | grep -q .; then
+            echo 'Source package is present. Run the manual build workflow with its path wired into the build step.'
+          else
+            echo 'Source package is not in this repository.'
+            echo 'The Flinity archive is attached to the ChatGPT conversation, not available to GitHub Actions.'
+            echo 'This is a readiness check only; it does not claim to build an APK.'
+          fi
+      - name: Publish readiness report
+        run: |
+          mkdir -p work
+          {
+            echo '# FLIN RP launcher readiness'
+            echo
+            echo '- Repository workflow is active.'
+            echo '- Original Flinity package is not currently stored in the repository.'
+            echo '- No modified APK was produced.'
+            echo '- Server target: 195.18.27.226:3146'
+          } > work/readiness.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FLIN-RP-readiness
+          path: work/readiness.md
+
   inspect:
+    if: github.event_name == 'workflow_dispatch' && inputs.source_url != ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +71,7 @@ jobs:
           APK="$(find work/original -type f -name '*.apk' -print -quit)"
           mkdir -p work
           if [ -z "$APK" ]; then
-            ROOT="$(find work/original -type f -name AndroidManifest.xml -printf '%h\n' -quit)"
+            ROOT="$(find work/original -type f -name AndroidManifest.xml -printf '%h\\n' -quit)"
             test -n "$ROOT" || { echo 'No APK or AndroidManifest.xml found'; exit 1; }
             (cd "$ROOT" && zip -qr "$GITHUB_WORKSPACE/work/flinity-original.apk" .)
             APK="$GITHUB_WORKSPACE/work/flinity-original.apk"
@@ -48,13 +85,11 @@ jobs:
       - name: Inspect connection configuration
         run: |
           python3 tools/inspect_package.py work/decoded | tee work/inspection.txt
-          if ! grep -Raq '195\.18\.27\.226' work/decoded; then
+          if ! grep -Raq '195\\.18\\.27\\.226' work/decoded; then
             echo 'STOP: FLIN RP host is not stored as a plain string.'
-            echo 'The server list may be delivered remotely or encoded in DEX/native code.'
             echo 'No APK will be produced until the actual connection setter is identified.'
             exit 2
           fi
-          echo 'Host string found. Manual code-level validation is still required before release.'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
